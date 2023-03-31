@@ -1,0 +1,13 @@
+{
+    "name": "dtswHdfswriter",
+    "parameter": {
+        "defaultFS": "",
+        "fileType": "",
+        "path": "",
+        "fileName": "",
+        "column": [],
+        "writeMode": "",
+        "fieldDelimiter": "",
+        "compress":""
+    }
+}

@@ -1,0 +1,1 @@
+hive -u jdbc:hive2://172.18.2.19:10000/default -n hdfs -p  -e 'msck repair table  table xiao_par_1'

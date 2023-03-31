@@ -1,0 +1,6 @@
+{
+  "name": "httpreader",
+  "class": "com.wgzhao.addax.plugin.reader.httpreader.HttpReader",
+  "description": "Retrive data from RESTful API",
+  "developer": "wgzhao"
+}
