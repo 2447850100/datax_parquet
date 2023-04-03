@@ -114,12 +114,7 @@
             <artifactId>plugin-unstructured-storage-util</artifactId>
             <version>${datax-project-version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.alibaba</groupId>
-            <artifactId>fastjson</artifactId>
-            <version>1.2.83</version>
-            <scope>compile</scope>
-        </dependency>
+
 
     </dependencies>
 
