@@ -49,7 +49,7 @@ public class HdfsWriter extends Writer {
 
         private String jdbcUrl;
 
-        //        private String address;
+        // private String address;
 
         //private String database;
 
