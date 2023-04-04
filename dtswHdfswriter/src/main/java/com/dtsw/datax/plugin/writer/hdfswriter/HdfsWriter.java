@@ -329,7 +329,7 @@ public class HdfsWriter extends Writer {
                     writer.write(shellSql);
                     writer.close();
                     process = Runtime.getRuntime().exec(new String[]{"/bin/bash", url});
-                    LOG.info("执行 shellsql" + shellSql);
+                    LOG.info("执行 shellSql  " + shellSql);
                 }
 
                 if (!process.waitFor(20, TimeUnit.SECONDS)) {
