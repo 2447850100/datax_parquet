@@ -288,7 +288,6 @@ public class HdfsWriter extends Writer {
             hdfsHelper.renameFile(tmpFiles, endFiles);
             synchronized (HdfsWriter.class) {
                 if (!isFinished) {
-
                     if (HdfsHelper.haveKerberos) {
                         try (Connection connection = DriverManager.getConnection(this.jdbcUrl)) {
                             connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
