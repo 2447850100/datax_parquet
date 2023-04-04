@@ -56,4 +56,5 @@ public class Key {
     public static final String PARQUET_MERGE_RESULT = "parquetMergeResult";
     public static final String PRECISION = "precision";
     public static final String TABLE_NAME = "tableName";
+    public static final String JDBC_URL = "jdbcUrl";
 }

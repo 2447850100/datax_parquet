@@ -18,6 +18,8 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
@@ -40,14 +42,15 @@ public class HdfsWriter extends Writer {
         private String compress;
         private String encoding;
 
+
         private String userName;
 
         private String password;
 
         private String jdbcUrl;
 
-        private String address;
-
+        //        private String address;
+//
         private String database;
 
         private Boolean isEnableHive;
@@ -99,11 +102,10 @@ public class HdfsWriter extends Writer {
             //配置了关联hive刷新分区相关信息 需要配置以下参数
             this.isEnableHive = this.writerSliceConfig.getBool(Key.IS_HIVE_ENABLE, true);
             if (isEnableHive) {
-                this.userName = this.writerSliceConfig.getNecessaryValue(Key.USER_NAME, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
+                this.userName = this.writerSliceConfig.getNecessaryValue(Key.USER_NAME,HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.password = this.writerSliceConfig.getString(Key.PASSWORD, " ");
                 this.database = this.writerSliceConfig.getNecessaryValue(Key.DATABASE, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
-                this.address = this.writerSliceConfig.getNecessaryValue(Key.ADDRESS, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
-                this.jdbcUrl = "jdbc:hive2://" + address + "/" + database;
+                this.jdbcUrl = this.writerSliceConfig.getNecessaryValue(Key.JDBC_URL, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.tableName = this.writerSliceConfig.getNecessaryValue(Key.TABLE_NAME, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
             }
             //path
@@ -286,17 +288,22 @@ public class HdfsWriter extends Writer {
             hdfsHelper.renameFile(tmpFiles, endFiles);
             synchronized (HdfsWriter.class) {
                 if (!isFinished) {
-                    if (this.isEnableHive) {
+
+                    if (HdfsHelper.haveKerberos) {
+                        try (Connection connection = DriverManager.getConnection(this.jdbcUrl)) {
+                            connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
+                            connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
+                        } catch (Exception e) {
+                            LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
+                        }
+                    } else {
                         String sql = "hive -u " + this.jdbcUrl + " -n " + this.userName + " -p " + this.password + "";
                         String shellSql = String.format("%s%s", sql, String.format(" -e 'set hive.msck.path.validation=ignore; msck repair table %s'", this.tableName));
-                        if (HdfsHelper.haveKerberos) {
-                            String kerberosCommand = String.format("kinit -k -t %s %s || true", HdfsHelper.kerberosKeytabFilePath, HdfsHelper.kerberosPrincipal);
-                            shellSql = String.format("%s%s%s", kerberosCommand, " && ", shellSql);
-                        }
                         executeCommand(shellSql);
-                        isFinished = true;
                     }
+                    isFinished = true;
                 }
+
             }
         }
 
@@ -322,9 +329,10 @@ public class HdfsWriter extends Writer {
                     writer.write(shellSql);
                     writer.close();
                     process = Runtime.getRuntime().exec(new String[]{"/bin/bash", url});
+                    LOG.info("执行 shellsql" + shellSql);
                 }
 
-                if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                if (!process.waitFor(20, TimeUnit.SECONDS)) {
                     throw new DataXException("执行command命令超时,请检查网络io");
                 }
 
