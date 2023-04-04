@@ -50,8 +50,8 @@ public class HdfsWriter extends Writer {
         private String jdbcUrl;
 
         //        private String address;
-//
-        private String database;
+
+        //private String database;
 
         private Boolean isEnableHive;
 
@@ -104,7 +104,7 @@ public class HdfsWriter extends Writer {
             if (isEnableHive) {
                 this.userName = this.writerSliceConfig.getNecessaryValue(Key.USER_NAME,HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.password = this.writerSliceConfig.getString(Key.PASSWORD, " ");
-                this.database = this.writerSliceConfig.getNecessaryValue(Key.DATABASE, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
+               // this.database = this.writerSliceConfig.getNecessaryValue(Key.DATABASE, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.jdbcUrl = this.writerSliceConfig.getNecessaryValue(Key.JDBC_URL, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.tableName = this.writerSliceConfig.getNecessaryValue(Key.TABLE_NAME, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
             }
