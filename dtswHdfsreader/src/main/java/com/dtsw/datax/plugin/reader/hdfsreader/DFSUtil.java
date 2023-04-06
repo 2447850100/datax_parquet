@@ -60,7 +60,6 @@ public class DFSUtil {
     private String kerberosKeytabFilePath;
     private String kerberosPrincipal;
 
-
     private static final int DIRECTORY_SIZE_GUESS = 16 * 1024;
 
     public static final String HDFS_DEFAULTFS_KEY = "fs.defaultFS";
@@ -84,15 +83,13 @@ public class DFSUtil {
         //是否有Kerberos认证
         this.haveKerberos = taskConfig.getBool(Key.HAVE_KERBEROS, false);
         if (haveKerberos) {
+
             this.kerberosKeytabFilePath = taskConfig.getString(Key.KERBEROS_KEYTAB_FILE_PATH);
             this.kerberosPrincipal = taskConfig.getString(Key.KERBEROS_PRINCIPAL);
             this.hadoopConf.set(HADOOP_SECURITY_AUTHENTICATION_KEY, "kerberos");
         }
         this.kerberosAuthentication(this.kerberosPrincipal, this.kerberosKeytabFilePath);
 
-
-
-        LOG.info(String.format("hadoopConfig details:%s", JSON.toJSONString(this.hadoopConf)));
     }
 
     private void kerberosAuthentication(String kerberosPrincipal, String kerberosKeytabFilePath) {
