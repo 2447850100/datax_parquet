@@ -180,7 +180,7 @@ public class HdfsWriter extends Writer {
             } else if ("PAR".equalsIgnoreCase(fileType)) {
 
                 // parquet 默认的非压缩标志是 UNCOMPRESSED ，而不是常见的 NONE，这里统一为 NONE
-                if ("NONE".equals(compress) || "UNCOMPRESSED".equalsIgnoreCase(compress)) {
+                if (compress == null || "NONE".equals(compress) || "UNCOMPRESSED".equalsIgnoreCase(compress)) {
                     this.writerSliceConfig.set(Key.COMPRESS, "UNCOMPRESSED");
                 } else {
                     compress = compress.toUpperCase().trim();
@@ -287,22 +287,26 @@ public class HdfsWriter extends Writer {
         public void post() {
             hdfsHelper.renameFile(tmpFiles, endFiles);
             synchronized (HdfsWriter.class) {
-                if (!isFinished) {
-                    if (HdfsHelper.haveKerberos) {
-                        try (Connection connection = DriverManager.getConnection(this.jdbcUrl)) {
-                            connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
-                            connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
-                        } catch (Exception e) {
-                            LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
+                if (this.isEnableHive) {
+                    if (!isFinished) {
+                        if (HdfsHelper.haveKerberos) {
+                            try (Connection connection = DriverManager.getConnection(this.jdbcUrl)) {
+                                connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
+                                boolean execute = connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
+                                if (!execute) {
+                                    LOG.info("hive分区刷新成功");
+                                }
+                            } catch (Exception e) {
+                                LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
+                            }
+                        } else {
+                            String sql = "hive -u " + this.jdbcUrl + " -n " + this.userName + " -p " + this.password + "";
+                            String shellSql = String.format("%s%s", sql, String.format(" -e 'set hive.msck.path.validation=ignore; msck repair table %s'", this.tableName));
+                            executeCommand(shellSql);
                         }
-                    } else {
-                        String sql = "hive -u " + this.jdbcUrl + " -n " + this.userName + " -p " + this.password + "";
-                        String shellSql = String.format("%s%s", sql, String.format(" -e 'set hive.msck.path.validation=ignore; msck repair table %s'", this.tableName));
-                        executeCommand(shellSql);
+                        isFinished = true;
                     }
-                    isFinished = true;
                 }
-
             }
         }
 

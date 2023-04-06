@@ -439,7 +439,7 @@ public class DFSUtil {
             } catch (Exception e) {
                 String message = String.format("从parquetfile文件路径[%s]中读取数据发生异常，请联系系统管理员。"
                         , sourceParquetFilepath);
-                LOG.error(message);
+                LOG.error("解析parquet异常，错误原因 ",e);
                 throw DataXException.asDataXException(HdfsReaderErrorCode.READ_FILE_ERROR, message);
             }
         } else {
