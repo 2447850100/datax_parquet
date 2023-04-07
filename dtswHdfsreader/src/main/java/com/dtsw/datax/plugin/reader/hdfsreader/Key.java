@@ -7,6 +7,7 @@ public final class Key {
      */
     public final static String PATH = "path";
     public final static String DEFAULT_FS = "defaultFS";
+    public final static String HADOOP_CONFIG_PATH = "hadoopConfigPath";
     public static final String FILETYPE = "fileType";
     public static final String HADOOP_CONFIG = "hadoopConfig";
     public static final String HAVE_KERBEROS = "haveKerberos";

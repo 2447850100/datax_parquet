@@ -14,6 +14,8 @@ public class Key {
     public final static String DATABASE = "database";
     public final static String ADDRESS = "address";
 
+    public final static String HADOOP_CONFIG_PATH = "hadoopConfigPath";
+
     //must have
     public final static String FILE_TYPE = "fileType";
     // must have

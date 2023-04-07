@@ -42,9 +42,12 @@ import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.*;
 
@@ -60,36 +63,56 @@ public class DFSUtil {
     private String kerberosKeytabFilePath;
     private String kerberosPrincipal;
 
+    public static final String HADOOP_HOME = "HADOOP_HOME";
+
     private static final int DIRECTORY_SIZE_GUESS = 16 * 1024;
 
     public static final String HDFS_DEFAULTFS_KEY = "fs.defaultFS";
+
+    private static final String HDFS_CONF_DIR = "HDFS_CONF_DIR";
     public static final String HADOOP_SECURITY_AUTHENTICATION_KEY = "hadoop.security.authentication";
+    public static final String HADOOP_CONF_DIR = "HADOOP_CONF_DIR";
+
+    public static final String HDFS_SITE_XML = "hdfs-site.xml";
+    public static final String MAPRED_SITE_XML = "mapred-site.xml";
+
+    public static final String CORE_SITE_XML = "core-site.xml";
 
 
     public DFSUtil(Configuration taskConfig) {
         hadoopConf = new org.apache.hadoop.conf.Configuration();
         //io.file.buffer.size 性能参数
         //http://blog.csdn.net/yangjl38/article/details/7583374
-        Configuration hadoopSiteParams = taskConfig.getConfiguration(Key.HADOOP_CONFIG);
-        JSONObject hadoopSiteParamsAsJsonObject = JSON.parseObject(taskConfig.getString(Key.HADOOP_CONFIG));
-        if (null != hadoopSiteParams) {
-            Set<String> paramKeys = hadoopSiteParams.getKeys();
-            for (String each : paramKeys) {
-                hadoopConf.set(each, hadoopSiteParamsAsJsonObject.getString(each));
-            }
+
+        String hadoopConfigPath = taskConfig.getString(Key.HADOOP_CONFIG_PATH,null);
+        String hadoopConfig = taskConfig.getString(Key.HADOOP_CONFIG,null);
+        List<String> files = new ArrayList<>();
+        loadHadoopConfiguration(hadoopConfigPath,taskConfig,files);
+
+        if (StringUtils.isBlank(hadoopConfig) && files.isEmpty()) {
+            throw DataXException.asDataXException("hadoopConfig和 hadoopConfigPath至少配置一个或者配置了hadoopConfigPath 但其下未找到相关hadoop配置");
         }
-        hadoopConf.set(HDFS_DEFAULTFS_KEY, taskConfig.getString(Key.DEFAULT_FS));
 
         //是否有Kerberos认证
-        this.haveKerberos = taskConfig.getBool(Key.HAVE_KERBEROS, false);
-        if (haveKerberos) {
+        this.haveKerberos = taskConfig.getBool(Key.HAVE_KERBEROS,false) || "kerberos".equals(hadoopConf.get(HADOOP_SECURITY_AUTHENTICATION_KEY));
 
+        if (haveKerberos) {
             this.kerberosKeytabFilePath = taskConfig.getString(Key.KERBEROS_KEYTAB_FILE_PATH);
             this.kerberosPrincipal = taskConfig.getString(Key.KERBEROS_PRINCIPAL);
             this.hadoopConf.set(HADOOP_SECURITY_AUTHENTICATION_KEY, "kerberos");
         }
         this.kerberosAuthentication(this.kerberosPrincipal, this.kerberosKeytabFilePath);
 
+    }
+
+    private void loadHadoopConfiguration(String hadoopConfigPath,Configuration taskConfig,List<String> files) {
+        if (StringUtils.isNotBlank(hadoopConfigPath)) {
+            getConfigurationFile(hadoopConfigPath,files);
+            for (String file : files) {
+                hadoopConf.addResource(new Path(file));
+            }
+        }
+        loadConfigurationFromJson(taskConfig);
     }
 
     private void kerberosAuthentication(String kerberosPrincipal, String kerberosKeytabFilePath) {
@@ -202,6 +225,53 @@ public class DFSUtil {
             LOG.error(message);
             throw DataXException.asDataXException(
                     HdfsReaderErrorCode.FILE_TYPE_UNSUPPORT, message);
+        }
+    }
+
+
+
+    public void getConfigurationFile(String confPath,List<String> fileList) {
+
+            File dir = new File(confPath);
+            File[] files = dir.listFiles();
+            for (File file : files) {
+                if (file.isFile()) {
+                    fileList.add(file.getPath());
+                } else if (file.isDirectory()) {
+                    getConfigurationFile(file.getPath(),fileList);
+                }
+            }
+    }
+
+    private boolean loadConfigurationFromConfigFiles(List<String> configDirPaths,
+                                                     List<String> xmlConfigFiles, org.apache.hadoop.conf.Configuration configuration) {
+
+        List<String> temp = new LinkedList<>();
+        temp.addAll(xmlConfigFiles);
+        for (String dir : configDirPaths) {
+            if (temp.isEmpty()) {
+                break;
+            }
+            Iterator<String> iterator = temp.iterator();
+            while (iterator.hasNext()) {
+                String file = iterator.next();
+                if (Files.exists(Paths.get(dir, file))) {
+                    configuration.addResource(new Path(dir, file));
+                    iterator.remove();
+                }
+            }
+        }
+        return xmlConfigFiles.isEmpty();
+    }
+
+    private void loadConfigurationFromJson(Configuration taskConfig) {
+        Configuration hadoopSiteParams = taskConfig.getConfiguration(Key.HADOOP_CONFIG);
+        JSONObject hadoopSiteParamsAsJsonObject = JSON.parseObject(taskConfig.getString(Key.HADOOP_CONFIG));
+        if (null != hadoopSiteParams) {
+            Set<String> paramKeys = hadoopSiteParams.getKeys();
+            for (String each : paramKeys) {
+                hadoopConf.set(each, hadoopSiteParamsAsJsonObject.getString(each));
+            }
         }
     }
 
@@ -436,7 +506,7 @@ public class DFSUtil {
             } catch (Exception e) {
                 String message = String.format("从parquetfile文件路径[%s]中读取数据发生异常，请联系系统管理员。"
                         , sourceParquetFilepath);
-                LOG.error("解析parquet异常，错误原因 ",e);
+                LOG.error("解析parquet异常，错误原因 ", e);
                 throw DataXException.asDataXException(HdfsReaderErrorCode.READ_FILE_ERROR, message);
             }
         } else {
@@ -469,7 +539,7 @@ public class DFSUtil {
                     String columnValue = null;
 
                     if (null != columnIndex) {
-                        if (null != recordFields.get(columnIndex)){
+                        if (null != recordFields.get(columnIndex)) {
                             columnValue = recordFields.get(columnIndex).toString();
                         }
                     } else {
@@ -706,6 +776,7 @@ public class DFSUtil {
         }
         return false;
     }
+
     //判断是否为parquet
     private boolean isPARFile(Path file) {
 
@@ -720,10 +791,10 @@ public class DFSUtil {
 
         } catch (IOException e) {
             LOG.info("检查文件类型: [{}] 不是Parquet File.", file);
-        }catch (Exception e) {
+        } catch (Exception e) {
 
             if (!(e instanceof VersionParser.VersionParseException)) {
-                LOG.error("hdfs出现异常，请检查",e);
+                LOG.error("hdfs出现异常，请检查", e);
                 throw e;
 
             }

@@ -40,14 +40,20 @@ import org.apache.parquet.schema.Types;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public  class HdfsHelper {
     public static final Logger LOG = LoggerFactory.getLogger(HdfsWriter.Job.class);
     public FileSystem fileSystem = null;
+
+    public static final String HADOOP_HOME = "HADOOP_HOME";
     public JobConf conf = null;
     public org.apache.hadoop.conf.Configuration hadoopConf = null;
     public static final String HADOOP_SECURITY_AUTHENTICATION_KEY = "hadoop.security.authentication";
@@ -60,19 +66,18 @@ public  class HdfsHelper {
     public static String  kerberosKeytabFilePath;
     public static String  kerberosPrincipal;
 
-    public void getFileSystem(String defaultFS, Configuration taskConfig){
+    public void getFileSystem(Configuration taskConfig){
         hadoopConf = new org.apache.hadoop.conf.Configuration();
 
-        Configuration hadoopSiteParams = taskConfig.getConfiguration(Key.HADOOP_CONFIG);
-        JSONObject hadoopSiteParamsAsJsonObject = JSON.parseObject(taskConfig.getString(Key.HADOOP_CONFIG));
-        if (null != hadoopSiteParams) {
-            Set<String> paramKeys = hadoopSiteParams.getKeys();
-            for (String each : paramKeys) {
-                hadoopConf.set(each, hadoopSiteParamsAsJsonObject.getString(each));
-            }
-        }
-        hadoopConf.set(HDFS_DEFAULTFS_KEY, defaultFS);
+        String hadoopConfigPath = taskConfig.getString(Key.HADOOP_CONFIG_PATH,null);
+        String hadoopConfig = taskConfig.getString(Key.HADOOP_CONFIG,null);
+        List<String> files = new ArrayList<>();
+        loadHadoopConfiguration(hadoopConfigPath,taskConfig,files);
 
+        if (StringUtils.isBlank(hadoopConfig) && files.isEmpty()) {
+            throw DataXException.asDataXException("hadoopConfig和 hadoopConfigPath至少配置一个或者配置了hadoopConfigPath 但其下未找到相关hadoop配置");
+        }
+        String defaultFs = hadoopConf.get("fs.defaultFS");
         //是否有Kerberos认证
         this.haveKerberos = taskConfig.getBool(Key.HAVE_KERBEROS, false);
         if(haveKerberos){
@@ -86,22 +91,87 @@ public  class HdfsHelper {
             fileSystem = FileSystem.get(conf);
         } catch (IOException e) {
             String message = String.format("获取FileSystem时发生网络IO异常,请检查您的网络是否正常!HDFS地址：[%s]",
-                    "message:defaultFS =" + defaultFS);
+                    "message:defaultFS =" + defaultFs);
             LOG.error(message);
             throw DataXException.asDataXException(HdfsWriterErrorCode.CONNECT_HDFS_IO_ERROR, e);
         }catch (Exception e) {
             String message = String.format("获取FileSystem失败,请检查HDFS地址是否正确: [%s]",
-                    "message:defaultFS =" + defaultFS);
+                    "message:defaultFS =" + defaultFs);
             LOG.error(message);
             throw DataXException.asDataXException(HdfsWriterErrorCode.CONNECT_HDFS_IO_ERROR, e);
         }
 
         if(null == fileSystem || null == conf){
             String message = String.format("获取FileSystem失败,请检查HDFS地址是否正确: [%s]",
-                    "message:defaultFS =" + defaultFS);
+                    "message:defaultFS =" + defaultFs);
             LOG.error(message);
             throw DataXException.asDataXException(HdfsWriterErrorCode.CONNECT_HDFS_IO_ERROR, message);
         }
+    }
+    public void getConfigurationFile(String confPath,List<String> fileList) {
+
+        File dir = new File(confPath);
+        File[] files = dir.listFiles();
+        for (File file : files) {
+            if (file.isFile()) {
+                fileList.add(file.getPath());
+            } else if (file.isDirectory()) {
+                getConfigurationFile(file.getPath(),fileList);
+            }
+        }
+    }
+    private void loadHadoopConfiguration(String hadoopConfigPath,Configuration taskConfig,List<String> files) {
+        if (StringUtils.isNotBlank(hadoopConfigPath)) {
+
+            getConfigurationFile(hadoopConfigPath,files);
+            for (String file : files) {
+                hadoopConf.addResource(new Path(file));
+            }
+        }
+        loadConfigurationFromJson(taskConfig);
+    }
+    private void loadConfigurationFromJson(Configuration taskConfig) {
+        Configuration hadoopSiteParams = taskConfig.getConfiguration(Key.HADOOP_CONFIG);
+        JSONObject hadoopSiteParamsAsJsonObject = JSON.parseObject(taskConfig.getString(Key.HADOOP_CONFIG));
+        if (null != hadoopSiteParams) {
+            Set<String> paramKeys = hadoopSiteParams.getKeys();
+            for (String each : paramKeys) {
+                hadoopConf.set(each, hadoopSiteParamsAsJsonObject.getString(each));
+            }
+        }
+    }
+
+
+    /**
+     * 从环境变量中，获取可能的配置文件目录
+     *
+     * @param envAvaliables
+     * @return
+     */
+    private List<String> getPossibleConfigDirPath(List<String> envAvaliables) {
+        List<String> paths = envAvaliables.stream()
+                .filter(ava -> System.getenv().containsKey(ava))
+                .map(ava -> {
+                    String dirPath = System.getenv(ava);
+                    if (ava.equals(HADOOP_HOME)) {
+                        java.nio.file.Path confPath = Paths.get(dirPath, "conf");
+                        java.nio.file.Path confPath2 = Paths.get(dirPath, "/etc/hadoop"); // hadoop 2.2
+                        if (Files.exists(confPath)) {
+                            return confPath.toString();
+                        } else if (Files.exists(confPath2)) {
+                            return confPath2.toString();
+                        }
+                    } else {
+                        java.nio.file.Path confPath = Paths.get(dirPath);
+                        if (Files.exists(confPath)) {
+                            return confPath.toString();
+                        }
+                    }
+                    return null;
+                }).filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        paths.add(0, ".");
+        return paths;
     }
 
     private void kerberosAuthentication(String kerberosPrincipal, String kerberosKeytabFilePath){

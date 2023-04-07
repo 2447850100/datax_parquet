@@ -22,8 +22,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 
 public class HdfsWriter extends Writer {
@@ -49,9 +47,6 @@ public class HdfsWriter extends Writer {
 
         private String jdbcUrl;
 
-        // private String address;
-
-        //private String database;
 
         private Boolean isEnableHive;
 
@@ -85,14 +80,13 @@ public class HdfsWriter extends Writer {
 
             //创建textfile存储
             hdfsHelper = new HdfsHelper();
-
-            hdfsHelper.getFileSystem(defaultFS, this.writerSliceConfig);
+            hdfsHelper.getFileSystem(this.writerSliceConfig);
+            this.defaultFS = hdfsHelper.hadoopConf.get("fs.defaultFS");
         }
 
         private void validateParameter() {
 
 
-            this.defaultFS = this.writerSliceConfig.getNecessaryValue(Key.DEFAULT_FS, HdfsWriterErrorCode.REQUIRED_VALUE);
             //fileType check
             this.fileType = this.writerSliceConfig.getNecessaryValue(Key.FILE_TYPE, HdfsWriterErrorCode.REQUIRED_VALUE).toUpperCase().trim();
             if (!SUPPORT_FORMAT.contains(fileType)) {
@@ -177,7 +171,7 @@ public class HdfsWriter extends Writer {
                                         compress));
                     }
                 }
-            } else if ("PAR".equalsIgnoreCase(fileType)) {
+            } else if ("PARQUET".equalsIgnoreCase(fileType)) {
 
                 // parquet 默认的非压缩标志是 UNCOMPRESSED ，而不是常见的 NONE，这里统一为 NONE
                 if (compress == null || "NONE".equals(compress) || "UNCOMPRESSED".equalsIgnoreCase(compress)) {
@@ -207,24 +201,6 @@ public class HdfsWriter extends Writer {
             } catch (Exception e) {
                 throw DataXException.asDataXException(HdfsWriterErrorCode.ILLEGAL_VALUE,
                         String.format("不支持您配置的编码格式:[%s]", encoding), e);
-            }
-        }
-
-        private static int getDecimalPrecision(String type) {
-
-            String regEx = "[^0-9]";
-            Pattern p = Pattern.compile(regEx);
-            Matcher m = p.matcher(type);
-            return Integer.parseInt(m.replaceAll(" ").trim().split(" ")[0]);
-
-        }
-
-        private static int getDecimalScale(String type) {
-
-            if (!type.contains(",")) {
-                return 0;
-            } else {
-                return Integer.parseInt(type.split(",")[1].replace(")", "").trim());
             }
         }
 
@@ -288,11 +264,19 @@ public class HdfsWriter extends Writer {
             hdfsHelper.renameFile(tmpFiles, endFiles);
             synchronized (HdfsWriter.class) {
                 if (this.isEnableHive) {
+                    String[] arr = this.path.split("/");
+                    String tempStr = arr[arr.length-1];
+                    String partition = tempStr.split("=")[0];
+                    String partitionValue = tempStr.split("=")[1];
+                    String sql = String.format("ALTER TABLE %s ADD if not exist PARTITION (%s='%s')",this.tableName,partition,partitionValue);
                     if (!isFinished) {
                         if (HdfsHelper.haveKerberos) {
                             try (Connection connection = DriverManager.getConnection(this.jdbcUrl)) {
-                                connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
-                                boolean execute = connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
+                                //connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
+
+                                boolean execute = connection.prepareStatement(sql).execute();
+                                connection.prepareStatement(String.format("LOCATION %s",this.path));
+                                //boolean execute = connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
                                 if (!execute) {
                                     LOG.info("hive分区刷新成功");
                                 }
@@ -300,9 +284,10 @@ public class HdfsWriter extends Writer {
                                 LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
                             }
                         } else {
-                            String sql = "hive -u " + this.jdbcUrl + " -n " + this.userName + " -p " + this.password + "";
-                            String shellSql = String.format("%s%s", sql, String.format(" -e 'set hive.msck.path.validation=ignore; msck repair table %s'", this.tableName));
-                            executeCommand(shellSql);
+                            String sqlConnection = "hive -u " + this.jdbcUrl + " -n " + this.userName + " -p " + this.password + "";
+                            sql = String.format("%s%s",sqlConnection," -e " + sql + String.format("; LOCATION %s",this.path));
+                            //String shellSql = String.format("%s%s", sql, String.format(" -e 'set hive.msck.path.validation=ignore; msck repair table %s'", this.tableName));
+                            executeCommand(sql);
                         }
                         isFinished = true;
                     }
@@ -349,34 +334,6 @@ public class HdfsWriter extends Writer {
             }
         }
 
-        protected String commandInterpreter() {
-
-            String os = System.getProperty("os.name");
-            return os.toLowerCase().startsWith("win") ? "cmd.exe" : "sh";
-        }
-
-        private void buildProcess(String commandFile) throws IOException {
-            // setting up user to run commands
-            List<String> command = new LinkedList<>();
-
-            //init process builder
-            ProcessBuilder processBuilder = new ProcessBuilder();
-            // setting up a working directory
-
-            // merge error information to standard output stream
-            processBuilder.redirectErrorStream(true);
-
-
-            command.add(commandInterpreter());
-            command.addAll(Collections.emptyList());
-            command.add(commandFile);
-
-            // setting commands
-            processBuilder.command(command);
-            processBuilder.start();
-
-
-        }
 
         @Override
         public void destroy() {
@@ -572,13 +529,13 @@ public class HdfsWriter extends Writer {
         public void init() {
             this.writerSliceConfig = this.getPluginJobConf();
 
-            this.defaultFS = this.writerSliceConfig.getString(Key.DEFAULT_FS);
+
             this.fileType = this.writerSliceConfig.getString(Key.FILE_TYPE);
             //得当的已经是绝对路径，eg：hdfs://10.101.204.12:9000/user/hive/warehouse/writer.db/text/test.textfile
             this.fileName = this.writerSliceConfig.getString(Key.FILE_NAME);
 
             hdfsHelper = new HdfsHelper();
-            hdfsHelper.getFileSystem(defaultFS, writerSliceConfig);
+            hdfsHelper.getFileSystem(writerSliceConfig);
         }
 
         @Override
@@ -598,7 +555,7 @@ public class HdfsWriter extends Writer {
                 //写ORC FILE
                 hdfsHelper.orcFileStartWrite(lineReceiver, this.writerSliceConfig, this.fileName,
                         this.getTaskPluginCollector());
-            } else if (fileType.equalsIgnoreCase("PAR")) {
+            } else if (fileType.equalsIgnoreCase("PARQUET")) {
                 hdfsHelper.parquetFileStartWrite(lineReceiver, writerSliceConfig, fileName, getTaskPluginCollector());
             }
 
