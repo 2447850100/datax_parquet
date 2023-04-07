@@ -112,6 +112,7 @@ public class DFSUtil {
                 hadoopConf.addResource(new Path(file));
             }
         }
+        //优先读取用户配置的hadoopConfig,相同属性会覆盖
         loadConfigurationFromJson(taskConfig);
     }
 
