@@ -263,6 +263,10 @@ public class HdfsWriter extends Writer {
         @Override
         public void post() {
             hdfsHelper.renameFile(tmpFiles, endFiles);
+            connectionHiveAndFluash();
+        }
+
+        private void connectionHiveAndFluash() {
             synchronized (HdfsWriter.class) {
                 if (this.isEnableHive) {
                     String[] arr = this.path.split("/");
@@ -273,7 +277,6 @@ public class HdfsWriter extends Writer {
                     if (!isFinished) {
                         Connection connection = null;
                         try {
-
                             if (HdfsHelper.haveKerberos) {
                                 connection = DriverManager.getConnection(this.jdbcUrl);
                             } else {
