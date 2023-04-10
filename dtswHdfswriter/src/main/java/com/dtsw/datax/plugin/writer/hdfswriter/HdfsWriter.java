@@ -60,7 +60,7 @@ public class HdfsWriter extends Writer {
                     .map(i -> i.toCharArray()[0]).orElse(IOUtils.DIR_SEPARATOR_UNIX);
         }
 
-        public static final Set<String> SUPPORT_FORMAT = new HashSet<>(Arrays.asList("ORC", "PAR", "TEXT"));
+        public static final Set<String> SUPPORT_FORMAT = new HashSet<>(Arrays.asList("ORC", "PARQUET", "TEXT"));
         public static final Set<String> SUPPORTED_WRITE_MODE = new HashSet<>(Arrays.asList("append", "nonConflict", "truncate"));
 
         public static final Set<String> parSupportedCompress = Sets.newHashSet("NONE", "SNAPPY");
@@ -96,9 +96,9 @@ public class HdfsWriter extends Writer {
             //配置了关联hive刷新分区相关信息 需要配置以下参数
             this.isEnableHive = this.writerSliceConfig.getBool(Key.IS_HIVE_ENABLE, true);
             if (isEnableHive) {
-                this.userName = this.writerSliceConfig.getNecessaryValue(Key.USER_NAME,HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
+                this.userName = this.writerSliceConfig.getNecessaryValue(Key.USER_NAME, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.password = this.writerSliceConfig.getString(Key.PASSWORD, " ");
-               // this.database = this.writerSliceConfig.getNecessaryValue(Key.DATABASE, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
+                // this.database = this.writerSliceConfig.getNecessaryValue(Key.DATABASE, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.jdbcUrl = this.writerSliceConfig.getNecessaryValue(Key.JDBC_URL, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.tableName = this.writerSliceConfig.getNecessaryValue(Key.TABLE_NAME, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
             }
@@ -180,7 +180,7 @@ public class HdfsWriter extends Writer {
                     compress = compress.toUpperCase().trim();
                     if (!parSupportedCompress.contains(compress)) {
                         throw DataXException.asDataXException(HdfsWriterErrorCode.ILLEGAL_VALUE,
-                                String.format("目前PAR FILE仅支持SNAPPY压缩, 不支持您配置的 compress 模式 : [%s]",
+                                String.format("目前PARQUET FILE仅支持SNAPPY压缩, 不支持您配置的 compress 模式 : [%s]",
                                         compress));
                     }
                 }
@@ -265,29 +265,26 @@ public class HdfsWriter extends Writer {
             synchronized (HdfsWriter.class) {
                 if (this.isEnableHive) {
                     String[] arr = this.path.split("/");
-                    String tempStr = arr[arr.length-1];
+                    String tempStr = arr[arr.length - 1];
                     String partition = tempStr.split("=")[0];
                     String partitionValue = tempStr.split("=")[1];
-                    String sql = String.format("ALTER TABLE %s ADD if not exist PARTITION (%s='%s')",this.tableName,partition,partitionValue);
+                    String sql = String.format("ALTER TABLE %s ADD if not exists PARTITION(%s='%s')", this.tableName, partition, partitionValue);
                     if (!isFinished) {
-                        if (HdfsHelper.haveKerberos) {
-                            try (Connection connection = DriverManager.getConnection(this.jdbcUrl)) {
-                                //connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
-
-                                boolean execute = connection.prepareStatement(sql).execute();
-                                connection.prepareStatement(String.format("LOCATION %s",this.path));
-                                //boolean execute = connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
-                                if (!execute) {
-                                    LOG.info("hive分区刷新成功");
-                                }
-                            } catch (Exception e) {
-                                LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
+                        try {
+                            Connection connection;
+                            if (HdfsHelper.haveKerberos) {
+                                connection = DriverManager.getConnection(this.jdbcUrl);
+                            } else {
+                                connection = DriverManager.getConnection(this.jdbcUrl, this.userName, this.password);
                             }
-                        } else {
-                            String sqlConnection = "hive -u " + this.jdbcUrl + " -n " + this.userName + " -p " + this.password + "";
-                            sql = String.format("%s%s",sqlConnection," -e " + sql + String.format("; LOCATION %s",this.path));
-                            //String shellSql = String.format("%s%s", sql, String.format(" -e 'set hive.msck.path.validation=ignore; msck repair table %s'", this.tableName));
-                            executeCommand(sql);
+                            //connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
+                            boolean execute = connection.prepareStatement(String.format("%s%s", sql, String.format(" LOCATION '%s'", this.path))).execute();
+                            //boolean execute = connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
+                            if (!execute) {
+                                LOG.info("hive分区刷新成功");
+                            }
+                        } catch (Exception e) {
+                            LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
                         }
                         isFinished = true;
                     }

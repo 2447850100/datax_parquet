@@ -56,6 +56,11 @@
                     "maxDirtyNumber": 10
                 }
             }
+        },
+        "logger": {
+            "org.apache.parquet":{
+                "level":"warn"
+            }
         }
     }
 }

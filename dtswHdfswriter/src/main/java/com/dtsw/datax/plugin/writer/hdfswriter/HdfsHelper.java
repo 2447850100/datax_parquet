@@ -309,7 +309,7 @@ public  class HdfsHelper {
                     if(tmpFilesParent == null){
                         tmpFilesParent = srcFilePah.getParent();
                     }
-                    LOG.info(String.format("start rename file [%s] to file [%s].", srcFile,dstFile));
+
                     boolean renameTag = false;
                     long fileLen = fileSystem.getFileStatus(srcFilePah).getLen();
                     if(fileLen>0){
@@ -319,7 +319,7 @@ public  class HdfsHelper {
                             LOG.error(message);
                             throw DataXException.asDataXException(HdfsWriterErrorCode.HDFS_RENAME_FILE_ERROR, message);
                         }
-                        LOG.info(String.format("finish rename file [%s] to file [%s].", srcFile,dstFile));
+
                     }else{
                         LOG.info(String.format("文件［%s］内容为空,请检查写入是否正常！", srcFile));
                     }
@@ -598,7 +598,7 @@ public  class HdfsHelper {
         }else if ("BZIP2".equalsIgnoreCase(compress)) {
             codecClass = org.apache.hadoop.io.compress.BZip2Codec.class;
         }else if("SNAPPY".equalsIgnoreCase(compress)){
-            if (HdfsWriter.Job.fileType.equalsIgnoreCase("PAR")) {
+            if (HdfsWriter.Job.fileType.equalsIgnoreCase("PARQUET")) {
                 codecClass = org.apache.parquet.hadoop.codec.SnappyCodec.class;
             }else {
                 //todo 等需求明确后支持 需要用户安装SnappyCodec

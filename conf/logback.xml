@@ -138,6 +138,10 @@
     </logger>
 
     <root level="${loglevel:-INFO}">
+        <logger name="org.apache.parquet" additivity="false">
+            <level value="WARN"/>
+            <appender-ref ref="STDOUT"/>
+        </logger>
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FILE" />
         <!--
