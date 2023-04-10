@@ -6,6 +6,9 @@ package com.dtsw.datax.plugin.writer.hdfswriter;
 public class Key {
     // must have
     public static final String PATH = "path";
+
+    public static final String JAVA_SECURITY_KRB5_CONF = "java.security.krb5.conf";
+    public static final String KERBEROS_KRB5_CONF = "kerberosKrb5Conf";
     //must have
     public final static String DEFAULT_FS = "defaultFS";
     public final static String IS_HIVE_ENABLE = "haveHive";

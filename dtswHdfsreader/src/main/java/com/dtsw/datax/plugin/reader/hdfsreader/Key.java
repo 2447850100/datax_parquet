@@ -7,6 +7,9 @@ public final class Key {
      */
     public final static String PATH = "path";
     public final static String DEFAULT_FS = "defaultFS";
+
+    public static final String JAVA_SECURITY_KRB5_CONF = "java.security.krb5.conf";
+    public static final String KERBEROS_KRB5_CONF = "kerberosKrb5Conf";
     public final static String HADOOP_CONFIG_PATH = "hadoopConfigPath";
     public static final String FILETYPE = "fileType";
     public static final String HADOOP_CONFIG = "hadoopConfig";

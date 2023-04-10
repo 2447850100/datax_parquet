@@ -263,10 +263,10 @@ public class HdfsWriter extends Writer {
         @Override
         public void post() {
             hdfsHelper.renameFile(tmpFiles, endFiles);
-            connectionHiveAndFluash();
+            connectionHiveAndRefresh();
         }
 
-        private void connectionHiveAndFluash() {
+        private void connectionHiveAndRefresh() {
             synchronized (HdfsWriter.class) {
                 if (this.isEnableHive) {
                     String[] arr = this.path.split("/");
