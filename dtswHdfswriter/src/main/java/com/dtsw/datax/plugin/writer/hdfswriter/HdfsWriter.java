@@ -20,6 +20,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -270,8 +271,9 @@ public class HdfsWriter extends Writer {
                     String partitionValue = tempStr.split("=")[1];
                     String sql = String.format("ALTER TABLE %s ADD if not exists PARTITION(%s='%s')", this.tableName, partition, partitionValue);
                     if (!isFinished) {
+                        Connection connection = null;
                         try {
-                            Connection connection;
+
                             if (HdfsHelper.haveKerberos) {
                                 connection = DriverManager.getConnection(this.jdbcUrl);
                             } else {
@@ -285,6 +287,14 @@ public class HdfsWriter extends Writer {
                             }
                         } catch (Exception e) {
                             LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
+                        }finally {
+                            if (connection != null) {
+                                try {
+                                    connection.close();
+                                } catch (SQLException e) {
+                                    throw new RuntimeException(e);
+                                }
+                            }
                         }
                         isFinished = true;
                     }
