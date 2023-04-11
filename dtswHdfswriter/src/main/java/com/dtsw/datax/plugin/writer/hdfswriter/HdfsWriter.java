@@ -289,6 +289,7 @@ public class HdfsWriter extends Writer {
                                 LOG.info("hive分区刷新成功");
                             }
                         } catch (Exception e) {
+                            LOG.error("获取连接异常原因:[0]",e);
                             LOG.error(String.format("获取hive连接失败，请手动执行刷新指令: %s", String.format("msck repair table %s", this.tableName)));
                         }finally {
                             if (connection != null) {
