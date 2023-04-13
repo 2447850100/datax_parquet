@@ -217,17 +217,11 @@ public class DFSUtil {
     private void addSourceFileByType(String filePath) {
         // 检查file的类型和用户配置的fileType类型是否一致
         boolean isMatchedFileType = checkHdfsFileType(filePath, this.specifiedFileType);
-
-        if (isMatchedFileType) {
+        if (!isMatchedFileType) {
+            LOG.warn(String.format("[%s]不是[%s]类型的文件或者文件已损坏, 不处理该文件", filePath, this.specifiedFileType));
+        }else {
             LOG.info(String.format("[%s]是[%s]类型的文件, 将该文件加入source files列表", filePath, this.specifiedFileType));
             sourceHDFSAllFilesList.add(filePath);
-        } else {
-            String message = String.format("文件[%s]的类型与用户配置的fileType类型不一致，" +
-                            "请确认您配置的目录下面所有文件的类型均为[%s]"
-                    , filePath, this.specifiedFileType);
-            LOG.error(message);
-            throw DataXException.asDataXException(
-                    HdfsReaderErrorCode.FILE_TYPE_UNSUPPORT, message);
         }
     }
 
@@ -565,6 +559,7 @@ public class DFSUtil {
                                         "类型转换错误, 无法将[%s] 转换为[%s]", columnValue,
                                         "LONG"));
                             }
+
                             break;
                         case DOUBLE:
                             try {
@@ -583,7 +578,16 @@ public class DFSUtil {
                                         "类型转换错误, 无法将[%s] 转换为[%s]", columnValue,
                                         "BOOLEAN"));
                             }
-
+                            break;
+                        case INT:
+                        case INTEGER:
+                            try {
+                                columnGenerated = new IntegerColumn(columnValue);
+                            }catch (Exception e) {
+                                throw new IllegalArgumentException(String.format(
+                                        "类型转换错误, 无法将[%s] 转换为[%s]", columnValue,
+                                        "INT"));
+                            }
                             break;
                         case DATE:
                             try {
@@ -682,7 +686,7 @@ public class DFSUtil {
     }
 
     private enum Type {
-        STRING, LONG, BOOLEAN, DOUBLE, DATE,
+        STRING, LONG, BOOLEAN, DOUBLE, DATE, INT,INTEGER,
     }
 
     public boolean checkHdfsFileType(String filepath, String specifiedFileType) {
