@@ -114,6 +114,9 @@ public  class HdfsHelper {
 
         File dir = new File(confPath);
         File[] files = dir.listFiles();
+        if (files == null) {
+            return;
+        }
         for (File file : files) {
             if (file.isFile()) {
                 fileList.add(file.getPath());

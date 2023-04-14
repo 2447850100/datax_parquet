@@ -427,7 +427,17 @@ public class UnstructuredStorageReaderUtil {
 										"类型转换错误, 无法将[%s] 转换为[%s]", columnValue,
 										"BOOLEAN"));
 							}
+							break;
 
+						case INT:
+						case INTEGER:
+							try {
+								columnGenerated = new IntegerColumn(columnValue);
+							} catch (Exception e) {
+								throw new IllegalArgumentException(String.format(
+										"类型转换错误, 无法将[%s] 转换为[%s]", columnValue,
+										"INT"));
+							}
 							break;
 						case DATE:
 							try {
@@ -503,7 +513,7 @@ public class UnstructuredStorageReaderUtil {
 	}
 
 	private enum Type {
-		STRING, LONG, BOOLEAN, DOUBLE, DATE, ;
+		STRING, LONG, BOOLEAN, DOUBLE, DATE, INT,INTEGER,;
 	}
 
 	/**

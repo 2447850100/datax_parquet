@@ -137,11 +137,48 @@
         <appender-ref ref="PERF" />
     </logger>
 
+    <appender name="FILTER" class="ch.qos.logback.core.ConsoleAppender">
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>WARN</level>
+        </filter>
+        <filter class="ch.qos.logback.classic.filter.LoggerNameFilter">
+            <loggerName>org.apache.parquet.hadoop</loggerName>
+            <onMatch>DENY</onMatch>
+            <onMismatch>ACCEPT</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>%d %-5level [%thread] %logger:%line - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <logger name="org.apache.parquet.hadoop" additivity="false">
+        <level value="INFO"/>
+        <appender-ref ref="FILTER"/>
+    </logger>
+
+    <logger name="org.apache.parquet.hadoop.InternalParquetRecordReader" additivity="false">
+        <level value="WARN"/>
+        <appender-ref ref="STDOUT"/>
+    </logger>
+    <logger name="org.apache.parquet.hadoop.ParquetFileReader" additivity="false">
+        <level value="WARN"/>
+        <appender-ref ref="STDOUT"/>
+    </logger>
+    <logger name="parquet.hadoop.InternalParquetRecordReader" additivity="false">
+        <level value="WARN"/>
+        <appender-ref ref="STDOUT"/>
+    </logger>
+    <logger name="org.apache.parquet.hadoop.ParquetWriter" additivity="false">
+        <level value="WARN"/>
+        <appender-ref ref="STDOUT"/>
+    </logger>
+    <logger name="org.apache.parquet.hadoop.InternalParquetRecordWriter" additivity="false">
+        <level value="WARN"/>
+        <appender-ref ref="STDOUT"/>
+    </logger>
+
     <root level="${loglevel:-INFO}">
-        <logger name="org.apache.parquet" additivity="false">
-            <level value="WARN"/>
-            <appender-ref ref="STDOUT"/>
-        </logger>
+
         <appender-ref ref="STDOUT" />
         <appender-ref ref="FILE" />
         <!--
