@@ -27,6 +27,8 @@ import java.io.*;
 import java.nio.charset.UnsupportedCharsetException;
 import java.text.DateFormat;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class UnstructuredStorageReaderUtil {
 	private static final Logger LOG = LoggerFactory
@@ -82,6 +84,8 @@ public class UnstructuredStorageReaderUtil {
 		return splitedResult;
 	}
 
+
+
 	public static void readFromStream(InputStream inputStream, String context,
 									  Configuration readerSliceConfig, RecordSender recordSender,
 									  TaskPluginCollector taskPluginCollector) {
@@ -114,8 +118,16 @@ public class UnstructuredStorageReaderUtil {
 		// compress logic
 		try {
 			if (null == compress) {
-				reader = new BufferedReader(new InputStreamReader(inputStream,
-						encoding), bufferSize);
+				//目前适配既有gz又有textFile
+				if ("gz".equalsIgnoreCase(suffix(context))) {
+					CompressorInputStream compressorInputStream = new GzipCompressorInputStream(
+							inputStream);
+					reader = new BufferedReader(new InputStreamReader(
+							compressorInputStream, encoding), bufferSize);
+				}else {
+					reader = new BufferedReader(new InputStreamReader(inputStream,
+							encoding), bufferSize);
+				}
 			} else {
 				// TODO compress
 				if ("lzo_deflate".equalsIgnoreCase(compress)) {
@@ -129,10 +141,15 @@ public class UnstructuredStorageReaderUtil {
 					reader = new BufferedReader(new InputStreamReader(
 							lzopInputStream, encoding));
 				} else if ("gzip".equalsIgnoreCase(compress)) {
-					CompressorInputStream compressorInputStream = new GzipCompressorInputStream(
-							inputStream);
-					reader = new BufferedReader(new InputStreamReader(
-							compressorInputStream, encoding), bufferSize);
+					if (StringUtils.isBlank(suffix(context))) {
+						reader = new BufferedReader(new InputStreamReader(inputStream,
+								encoding), bufferSize);
+					}else {
+						CompressorInputStream compressorInputStream = new GzipCompressorInputStream(
+								inputStream);
+						reader = new BufferedReader(new InputStreamReader(
+								compressorInputStream, encoding), bufferSize);
+					}
 				} else if ("bzip2".equalsIgnoreCase(compress)) {
 					CompressorInputStream compressorInputStream = new BZip2CompressorInputStream(
 							inputStream);
@@ -231,6 +248,11 @@ public class UnstructuredStorageReaderUtil {
 			IOUtils.closeQuietly(reader);
 		}
 
+	}
+
+	private static String suffix(String filename) {
+		Matcher matcher = Pattern.compile("(([.]?).+([.])+)").matcher(filename);
+		return matcher.find() ? filename.substring(matcher.group().length()) : "";
 	}
 
 	public static void doReadFromStream(BufferedReader reader, String context,
