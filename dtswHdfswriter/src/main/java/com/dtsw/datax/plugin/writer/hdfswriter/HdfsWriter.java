@@ -5,6 +5,7 @@ import com.alibaba.datax.common.plugin.RecordReceiver;
 import com.alibaba.datax.common.spi.Writer;
 import com.alibaba.datax.common.util.Configuration;
 import com.alibaba.datax.plugin.unstructuredstorage.writer.Constant;
+import com.alibaba.fastjson2.JSON;
 import com.google.common.collect.Sets;
 import org.apache.commons.io.Charsets;
 import org.apache.commons.io.IOUtils;
@@ -23,6 +24,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 
 public class HdfsWriter extends Writer {
@@ -50,6 +53,8 @@ public class HdfsWriter extends Writer {
 
 
         private Boolean isEnableHive;
+
+        private String partitionFields;
 
         private String tableName;
 
@@ -102,6 +107,7 @@ public class HdfsWriter extends Writer {
                 // this.database = this.writerSliceConfig.getNecessaryValue(Key.DATABASE, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.jdbcUrl = this.writerSliceConfig.getNecessaryValue(Key.JDBC_URL, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
                 this.tableName = this.writerSliceConfig.getNecessaryValue(Key.TABLE_NAME, HdfsWriterErrorCode.CONFIG_INVALID_EXCEPTION);
+                this.partitionFields = this.writerSliceConfig.getString(Key.PARTITION_FIELDS);
             }
             //path
             this.path = this.writerSliceConfig.getNecessaryValue(Key.PATH, HdfsWriterErrorCode.REQUIRED_VALUE);
@@ -214,6 +220,7 @@ public class HdfsWriter extends Writer {
                     hdfsHelper.fileSystem.mkdirs(new Path(path));
                 }
             } catch (IOException e) {
+                LOG.error("创建文件夹失败，失败原因",e);
                 throw DataXException.asDataXException(HdfsWriterErrorCode.ILLEGAL_VALUE,
                         String.format("您配置的path: [%s] 不是一个合法的目录, 请您注意文件重名, 不合法目录名等情况.",
                                 path));
@@ -263,28 +270,43 @@ public class HdfsWriter extends Writer {
         @Override
         public void post() {
             hdfsHelper.renameFile(tmpFiles, endFiles);
-            connectionHiveAndRefresh();
+            if (isEnableHive && StringUtils.isNotBlank(partitionFields)) {
+                connectionHiveAndRefresh();
+            }
         }
+
+
 
         private void connectionHiveAndRefresh() {
             synchronized (HdfsWriter.class) {
                 if (this.isEnableHive) {
-                    String[] arr = this.path.split("/");
-                    String tempStr = arr[arr.length - 1];
-                    String partition = tempStr.split("=")[0];
-                    String partitionValue = tempStr.split("=")[1];
-                    String sql = String.format("ALTER TABLE %s ADD if not exists PARTITION(%s='%s')", this.tableName, partition, partitionValue);
                     if (!isFinished) {
                         Connection connection = null;
+
                         try {
                             if (HdfsHelper.haveKerberos) {
                                 connection = DriverManager.getConnection(this.jdbcUrl);
                             } else {
                                 connection = DriverManager.getConnection(this.jdbcUrl, this.userName, this.password);
                             }
-                            //connection.prepareStatement("set hive.msck.path.validation=ignore").execute();
-                            boolean execute = connection.prepareStatement(String.format("%s%s", sql, String.format(" LOCATION '%s'", this.path))).execute();
-                            //boolean execute = connection.prepareStatement(String.format("msck repair table %s", this.tableName)).execute();
+                            StringBuilder partitionBuilder = new StringBuilder();
+                            List<String> partitionFieldList = JSON.parseArray(this.partitionFields, String.class);
+                            for (String field : partitionFieldList) {
+                                String regex = "/" + field + "=(.*?)(?:/|$)";
+                                Pattern pattern = Pattern.compile(regex);
+                                Matcher matcher = pattern.matcher(path);
+                                if (matcher.find()) {
+                                    String value = matcher.group(1);
+                                    value = String.format("%S%S%S","'",value,"'");
+                                    partitionBuilder.append(field).append("=").append(value).append(",");
+                                }
+                            }
+                            String partitionField = partitionBuilder.toString();
+                            if (partitionBuilder.substring(partitionBuilder.length()-1).equals(",")) {
+                                partitionField = partitionField.substring(0,partitionField.length()-1);
+                            }
+                            String sql =  "alter table " + tableName + " add if not exists partition(" + partitionField + ")";
+                            boolean execute = connection.prepareStatement(sql).execute();
                             if (!execute) {
                                 LOG.info("hive分区刷新成功");
                             }

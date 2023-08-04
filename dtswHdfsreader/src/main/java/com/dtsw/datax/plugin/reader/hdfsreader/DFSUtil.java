@@ -98,7 +98,9 @@ public class DFSUtil {
 
         if (haveKerberos) {
             String krb5Path = taskConfig.getString(Key.KERBEROS_KRB5_CONF);
-            System.setProperty(Key.JAVA_SECURITY_KRB5_CONF, krb5Path);
+            if (StringUtils.isNotBlank(krb5Path)) {
+                System.setProperty(Key.JAVA_SECURITY_KRB5_CONF, krb5Path);
+            }
             this.kerberosKeytabFilePath = taskConfig.getString(Key.KERBEROS_KEYTAB_FILE_PATH);
             this.kerberosPrincipal = taskConfig.getString(Key.KERBEROS_PRINCIPAL);
             this.hadoopConf.set(HADOOP_SECURITY_AUTHENTICATION_KEY, "kerberos");
